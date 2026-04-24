@@ -1,0 +1,238 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert
+} from 'react-native';
+const Input = (props: any) => (
+  <TextInput
+    placeholderTextColor="#888"
+    style={{
+      backgroundColor: '#2c2c2e',
+      color: 'white',
+      padding: 10,
+      borderRadius: 8,
+      marginBottom: 8
+    }}
+    {...props}
+  />
+);
+const Button = ({ title, onPress }: any) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={{
+      backgroundColor: '#0a84ff',
+      padding: 12,
+      borderRadius: 10,
+      alignItems: 'center',
+      marginTop: 5
+    }}
+  >
+    <Text style={{ color: 'white', fontWeight: 'bold' }}>{title}</Text>
+  </TouchableOpacity>
+);
+const Card = ({ children }: any) => (
+  <View
+    style={{
+      backgroundColor: '#1c1c1e',
+      padding: 15,
+      borderRadius: 12,
+      marginBottom: 15
+    }}
+  >
+    {children}
+  </View>
+);
+export default function HomeScreen() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [user, setUser] = useState<any>(null);
+
+  const [exercise, setExercise] = useState('');
+  const [sets, setSets] = useState('');
+  const [reps, setReps] = useState('');
+  const [workouts, setWorkouts] = useState<any[]>([]);
+
+  const [calories, setCalories] = useState('');
+  const [protein, setProtein] = useState('');
+  const [carbs, setCarbs] = useState('');
+  const [fats, setFats] = useState('');
+  const [nutrition, setNutrition] = useState<any[]>([]);
+
+  const [weight, setWeight] = useState('');
+  const [progress, setProgress] = useState<any[]>([]);
+
+  const API = 'http://192.168.12.241:3000';
+  const today = () => new Date().toISOString().split('T')[0];
+
+  const safeFetch = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { error: text };
+    }
+  };
+  const login = async () => {
+    try {
+      const res = await fetch(API + '/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await safeFetch(res);
+      if (!res.ok) return Alert.alert("Login failed", data?.error);
+      setUser(data);
+      Alert.alert("Success", "Logged in");
+    } catch {
+      Alert.alert("Error", "Network issue");
+    }
+  };
+  const register = async () => {
+    try {
+      const res = await fetch(API + '/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await safeFetch(res);
+      if (!res.ok) return Alert.alert("Register failed", data?.error);
+      Alert.alert("Success", "Account created");
+      login();
+    } catch {
+      Alert.alert("Error", "Network issue");
+    }
+  };
+  const addWorkout = async () => {
+    if (!user?._id) return Alert.alert("Login required");
+    const newWorkout = {
+      userId: user._id,
+      exercise,
+      sets: Number(sets),
+      reps: Number(reps),
+      date: today()
+    };
+    await fetch(API + '/workouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newWorkout)
+    });
+    setWorkouts(prev => [...prev, newWorkout]);
+    setExercise('');
+    setSets('');
+    setReps('');
+  };
+  const saveMacros = async () => {
+    if (!user?._id) return Alert.alert("Login required");
+    const macro = {
+      userId: user._id,
+      date: today(),
+      calories: Number(calories) || 0,
+      protein: Number(protein) || 0,
+      carbs: Number(carbs) || 0,
+      fats: Number(fats) || 0
+    };
+    await fetch(API + '/nutrition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(macro)
+    });
+    setNutrition(prev => [...prev, macro]);
+    setCalories('');
+    setProtein('');
+    setCarbs('');
+    setFats('');
+  };
+  const addWeight = async () => {
+    if (!user?._id) return Alert.alert("Login required");
+    const entry = {
+      userId: user._id,
+      weight: Number(weight),
+      date: today()
+    };
+    await fetch(API + '/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry)
+    });
+    setProgress(prev => [...prev, entry]);
+    setWeight('');
+  };
+  if (!user) {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', padding: 20 }}>
+          <Text style={{ color: 'white', fontSize: 26, marginBottom: 20, textAlign: 'center' }}>
+            MYfitness
+          </Text>
+          <Card>
+            <Input value={email} placeholder="Email" onChangeText={setEmail} />
+            <Input value={password} placeholder="Password" secureTextEntry onChangeText={setPassword} />
+
+            <Button title="Login" onPress={login} />
+            <Button title="Register" onPress={register} />
+          </Card>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+  return (
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#000' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={{ padding: 15 }}>
+
+        <Text style={{ color: 'white', fontSize: 24, marginBottom: 15 }}>
+          Welcome 💪
+        </Text>
+        {/* ---------------- WORKOUTS ---------------- */}
+        <Card>
+          <Text style={{ color: 'white', fontSize: 18 }}>🏋️ Workouts</Text>
+
+          <Input value={exercise} placeholder="Exercise" onChangeText={setExercise} />
+          <Input value={sets} placeholder="Sets" onChangeText={setSets} keyboardType="numeric" />
+          <Input value={reps} placeholder="Reps" onChangeText={setReps} keyboardType="numeric" />
+
+          <Button title="Add Workout" onPress={addWorkout} />
+
+          {/* FIX: DISPLAY */}
+          {workouts.map((w, i) => (
+            <Text key={i} style={{ color: 'white', marginTop: 5 }}>
+              {w.exercise} — {w.sets} x {w.reps}
+            </Text>
+          ))}
+        </Card>
+        {/* ---------------- MACROS ---------------- */}
+        <Card>
+          <Text style={{ color: 'white', fontSize: 18 }}>🍎 Macros</Text>
+          <Input value={calories} placeholder="Calories" onChangeText={setCalories} />
+          <Input value={protein} placeholder="Protein" onChangeText={setProtein} />
+          <Input value={carbs} placeholder="Carbs" onChangeText={setCarbs} />
+          <Input value={fats} placeholder="Fats" onChangeText={setFats} />
+          <Button title="Save Macros" onPress={saveMacros} />
+          {/* FIX: DISPLAY */}
+          {nutrition.map((n, i) => (
+            <Text key={i} style={{ color: 'white', marginTop: 5 }}>
+              {n.date} | {n.calories} kcal | P:{n.protein} C:{n.carbs} F:{n.fats}
+            </Text>
+          ))}
+        </Card>
+        {/* ---------------- PROGRESS ---------------- */}
+        <Card>
+          <Text style={{ color: 'white', fontSize: 18 }}>📊 Progress</Text>
+          <Input value={weight} placeholder="Weight" onChangeText={setWeight} keyboardType="numeric" />
+          <Button title="Log Weight" onPress={addWeight} />
+          {/* FIX: DISPLAY */}
+          {progress.map((p, i) => (
+            <Text key={i} style={{ color: 'white', marginTop: 5 }}>
+              {p.date} — {p.weight} lbs
+            </Text>
+          ))}
+        </Card>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
