@@ -3,31 +3,25 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const app = express();
-
 app.use(express.json());
 app.use(cors());
-
 mongoose
   .connect("mongodb+srv://hunter:Jesus123!@myfitness.1slsdg1.mongodb.net/?appName=MyFitness")
   .then(() => console.log("MONGO CONNECTED"))
   .catch((err) => console.log("MONGO ERROR:", err));
-
 const User = mongoose.model('User', {
   email: String,
   password: String,
 });
-
-/* ✅ FIX APPLIED HERE: added weight field */
 const Workout = mongoose.model('Workout', {
   userId: String,
   exercise: String,
   sets: Number,
   reps: Number,
-  weight: Number, // ✅ FIXED
+  weight: Number, 
   date: String,
   createdAt: { type: Date, default: Date.now },
 });
-
 const Nutrition = mongoose.model('Nutrition', {
   userId: String,
   date: String,
@@ -36,15 +30,12 @@ const Nutrition = mongoose.model('Nutrition', {
   carbs: Number,
   fats: Number,
 });
-
 const Progress = mongoose.model('Progress', {
   userId: String,
   weight: Number,
   date: String,
   createdAt: { type: Date, default: Date.now },
 });
-
-/* ---------- helper to wire CRUD for a model ---------- */
 function crud(path, Model) {
   app.get(`${path}/:userId`, async (req, res) => {
     try {
@@ -54,7 +45,6 @@ function crud(path, Model) {
       res.status(500).json({ error: e.message });
     }
   });
-
   app.post(path, async (req, res) => {
     try {
       const item = await new Model(req.body).save();
@@ -63,41 +53,31 @@ function crud(path, Model) {
       res.status(500).json({ error: e.message });
     }
   });
-
   app.put(`${path}/:id`, async (req, res) => {
     try {
       if (!mongoose.isValidObjectId(req.params.id))
         return res.status(400).json({ error: 'Invalid id' });
-
       const updated = await Model.findByIdAndUpdate(req.params.id, req.body, {
         new: true,
       });
-
       if (!updated) return res.status(404).json({ error: 'Not found' });
-
       res.json(updated);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
   });
-
   app.delete(`${path}/:id`, async (req, res) => {
     try {
       if (!mongoose.isValidObjectId(req.params.id))
         return res.status(400).json({ error: 'Invalid id' });
-
       const deleted = await Model.findByIdAndDelete(req.params.id);
-
       if (!deleted) return res.status(404).json({ error: 'Not found' });
-
       res.status(204).end();
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
   });
 }
-
-/* ---------- auth ---------- */
 app.post('/register', async (req, res) => {
   try {
     const user = await new User(req.body).save();
@@ -106,14 +86,11 @@ app.post('/register', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 app.post('/login', async (req, res) => {
   const user = await User.findOne(req.body);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
   res.json(user);
 });
-
-/* ---------- resources ---------- */
 crud('/workouts', Workout);
 crud('/nutrition', Nutrition);
 crud('/progress', Progress);
