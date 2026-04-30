@@ -1,238 +1,752 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Alert
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputProps,
+  TouchableOpacity,
+  View,
+  ViewStyle,
 } from 'react-native';
-const Input = (props: any) => (
-  <TextInput
-    placeholderTextColor="#888"
-    style={{
-      backgroundColor: '#2c2c2e',
-      color: 'white',
-      padding: 10,
-      borderRadius: 8,
-      marginBottom: 8
-    }}
-    {...props}
-  />
-);
-const Button = ({ title, onPress }: any) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={{
-      backgroundColor: '#0a84ff',
-      padding: 12,
-      borderRadius: 10,
-      alignItems: 'center',
-      marginTop: 5
-    }}
-  >
-    <Text style={{ color: 'white', fontWeight: 'bold' }}>{title}</Text>
-  </TouchableOpacity>
-);
-const Card = ({ children }: any) => (
-  <View
-    style={{
-      backgroundColor: '#1c1c1e',
-      padding: 15,
-      borderRadius: 12,
-      marginBottom: 15
-    }}
-  >
-    {children}
-  </View>
-);
-export default function HomeScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [user, setUser] = useState<any>(null);
-
-  const [exercise, setExercise] = useState('');
-  const [sets, setSets] = useState('');
-  const [reps, setReps] = useState('');
-  const [workouts, setWorkouts] = useState<any[]>([]);
-
-  const [calories, setCalories] = useState('');
-  const [protein, setProtein] = useState('');
-  const [carbs, setCarbs] = useState('');
-  const [fats, setFats] = useState('');
-  const [nutrition, setNutrition] = useState<any[]>([]);
-
-  const [weight, setWeight] = useState('');
-  const [progress, setProgress] = useState<any[]>([]);
-
-  const API = 'http://192.168.12.241:3000';
-  const today = () => new Date().toISOString().split('T')[0];
-
-  const safeFetch = async (res: Response) => {
-    const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { error: text };
-    }
-  };
-  const login = async () => {
-    try {
-      const res = await fetch(API + '/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await safeFetch(res);
-      if (!res.ok) return Alert.alert("Login failed", data?.error);
-      setUser(data);
-      Alert.alert("Success", "Logged in");
-    } catch {
-      Alert.alert("Error", "Network issue");
-    }
-  };
-  const register = async () => {
-    try {
-      const res = await fetch(API + '/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await safeFetch(res);
-      if (!res.ok) return Alert.alert("Register failed", data?.error);
-      Alert.alert("Success", "Account created");
-      login();
-    } catch {
-      Alert.alert("Error", "Network issue");
-    }
-  };
-  const addWorkout = async () => {
-    if (!user?._id) return Alert.alert("Login required");
-    const newWorkout = {
-      userId: user._id,
-      exercise,
-      sets: Number(sets),
-      reps: Number(reps),
-      date: today()
-    };
-    await fetch(API + '/workouts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newWorkout)
-    });
-    setWorkouts(prev => [...prev, newWorkout]);
-    setExercise('');
-    setSets('');
-    setReps('');
-  };
-  const saveMacros = async () => {
-    if (!user?._id) return Alert.alert("Login required");
-    const macro = {
-      userId: user._id,
-      date: today(),
-      calories: Number(calories) || 0,
-      protein: Number(protein) || 0,
-      carbs: Number(carbs) || 0,
-      fats: Number(fats) || 0
-    };
-    await fetch(API + '/nutrition', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(macro)
-    });
-    setNutrition(prev => [...prev, macro]);
-    setCalories('');
-    setProtein('');
-    setCarbs('');
-    setFats('');
-  };
-  const addWeight = async () => {
-    if (!user?._id) return Alert.alert("Login required");
-    const entry = {
-      userId: user._id,
-      weight: Number(weight),
-      date: today()
-    };
-    await fetch(API + '/progress', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry)
-    });
-    setProgress(prev => [...prev, entry]);
-    setWeight('');
-  };
-  if (!user) {
-    return (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', padding: 20 }}>
-          <Text style={{ color: 'white', fontSize: 26, marginBottom: 20, textAlign: 'center' }}>
-            MYfitness
-          </Text>
-          <Card>
-            <Input value={email} placeholder="Email" onChangeText={setEmail} />
-            <Input value={password} placeholder="Password" secureTextEntry onChangeText={setPassword} />
-
-            <Button title="Login" onPress={login} />
-            <Button title="Register" onPress={register} />
-          </Card>
-        </View>
-      </KeyboardAvoidingView>
+import AsyncStorage from '@react-native-async-storage/async-storage';
+const API = 'http://192.168.12.241:3000';
+const theme = {
+  bg: '#0b0b0d',
+  surface: '#1c1c1e',
+  surfaceAlt: '#2c2c2e',
+  border: '#2e2e30',
+  text: '#ffffff',
+  textMuted: '#9a9aa0',
+  primary: '#0a84ff',
+  danger: '#ff453a',
+  success: '#30d158',
+  warning: '#ffd60a',
+  radius: 12,
+} as const;
+interface User {
+  _id: string;
+  name?: string;
+  email?: string;
+}
+interface Workout {
+  _id: string;
+  userId: string;
+  date: string;
+  exercise: string;
+  sets: number;
+  reps: number;
+  weight: number;
+}
+interface Nutrition {
+  _id: string;
+  userId: string;
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+}
+interface Progress {
+  _id: string;
+  userId: string;
+  date: string;
+  weight: number;
+}
+type Section = 'workout' | 'nutrition' | 'progress';
+const sectionToRoute: Record<Section, string> = {
+  workout: 'workouts',
+  nutrition: 'nutrition',
+  progress: 'progress',
+};
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+  });
+  const text = await res.text();
+  const data = text ? safeParse(text) : null;
+  if (!res.ok) {
+    throw new Error(
+      (data && typeof data === 'object' && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : null) ?? `Request failed (${res.status})`
     );
   }
+  return data as T;
+}
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text };
+  }
+}
+const today = (): string => new Date().toISOString().split('T')[0];
+function Input(props: TextInputProps) {
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#000' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ padding: 15 }}>
+    <TextInput
+      placeholderTextColor={theme.textMuted}
+      style={styles.input}
+      {...props}
+    />
+  );
+}
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+interface ButtonProps {
+  title: string;
+  onPress: () => void;
+  variant?: ButtonVariant;
+  disabled?: boolean;
+  style?: ViewStyle;
+}
+function Button({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled,
+  style,
+}: ButtonProps) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.8}
+      style={[
+        styles.btn,
+        variant === 'primary' && { backgroundColor: theme.primary },
+        variant === 'secondary' && {
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          borderColor: theme.border,
+        },
+        variant === 'danger' && { backgroundColor: theme.danger },
+        variant === 'ghost' && { backgroundColor: 'transparent' },
+        disabled && { opacity: 0.5 },
+        style,
+      ]}
+    >
+      <Text
+        style={[
+          styles.btnText,
+          variant === 'secondary' && { color: theme.text },
+          variant === 'ghost' && { color: theme.textMuted },
+        ]}
+      >
+        {title}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+function Card({
+  title,
+  children,
+}: {
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.card}>
+      {title ? <Text style={styles.cardTitle}>{title}</Text> : null}
+      {children}
+    </View>
+  );
+}
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+function Sparkline({ data }: { data: number[] }) {
+  if (data.length === 0) {
+    return <Text style={styles.muted}>No data yet.</Text>;
+  }
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  return (
+    <View style={styles.spark}>
+      {data.map((v, i) => {
+        const h = 8 + ((v - min) / range) * 48;
+        return <View key={i} style={[styles.sparkBar, { height: h }]} />;
+      })}
+    </View>
+  );
+}
+interface WorkoutDraft {
+  exercise: string;
+  sets: string;
+  reps: string;
+  weight: string;
+}
+interface NutritionDraft {
+  calories: string;
+  protein: string;
+  carbs: string;
+  fats: string;
+}
+interface ProgressDraft {
+  weight: string;
+}
+const emptyWorkoutDraft: WorkoutDraft = { exercise: '', sets: '', reps: '', weight: '' };
+const emptyNutritionDraft: NutritionDraft = {
+  calories: '',
+  protein: '',
+  carbs: '',
+  fats: '',
+};
+const emptyProgressDraft: ProgressDraft = { weight: '' };
+/*  Screen                                                            */
+export default function HomeScreen() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [nutrition, setNutrition] = useState<Nutrition[]>([]);
+  const [progress, setProgress] = useState<Progress[]>([]);
+  const [workoutDraft, setWorkoutDraft] =
+    useState<WorkoutDraft>(emptyWorkoutDraft);
+  const [nutritionDraft, setNutritionDraft] =
+    useState<NutritionDraft>(emptyNutritionDraft);
+  const [progressDraft, setProgressDraft] =
+    useState<ProgressDraft>(emptyProgressDraft);
 
-        <Text style={{ color: 'white', fontSize: 24, marginBottom: 15 }}>
-          Welcome 💪
-        </Text>
-        {/* ---------------- WORKOUTS ---------------- */}
+  const [editing, setEditing] = useState<{
+    section: Section;
+    id: string;
+  } | null>(null);
+  const loadData = useCallback(async (id: string) => {
+    try {
+      const [w, n, p] = await Promise.all([
+        request<Workout[]>(`/workouts/${id}`),
+        request<Nutrition[]>(`/nutrition/${id}`),
+        request<Progress[]>(`/progress/${id}`),
+      ]);
+      setWorkouts(w);
+      setNutrition(n);
+      setProgress(p);
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message || 'Failed to load data');
+    }
+  }, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('user');
+        if (saved) {
+          const parsed: User = JSON.parse(saved);
+          setUser(parsed);
+          await loadData(parsed._id);
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadData]);
+  const onRefresh = useCallback(async () => {
+    if (!user) return;
+    setRefreshing(true);
+    await loadData(user._id);
+    setRefreshing(false);
+  }, [user, loadData]);
+  const stats = useMemo(() => {
+    const t = today();
+    const todayCalories = nutrition
+      .filter((n) => n.date === t)
+      .reduce((s, n) => s + (n.calories ?? 0), 0);
+    const todayWorkouts = workouts.filter((w) => w.date === t).length;
+    const dates = new Set<string>([
+      ...workouts.map((w) => w.date),
+      ...nutrition.map((n) => n.date),
+      ...progress.map((p) => p.date),
+    ]);
+    let streak = 0;
+    const d = new Date();
+    while (dates.has(d.toISOString().split('T')[0])) {
+      streak += 1;
+      d.setDate(d.getDate() - 1);
+    }
+    const weightSeries = [...progress]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-14)
+      .map((p) => p.weight);
+
+    return { todayCalories, todayWorkouts, streak, weightSeries };
+  }, [workouts, nutrition, progress]);
+  const cancelEdit = () => {
+    setEditing(null);
+    setWorkoutDraft(emptyWorkoutDraft);
+    setNutritionDraft(emptyNutritionDraft);
+    setProgressDraft(emptyProgressDraft);
+  };
+  const startEdit = (section: Section, item: Workout | Nutrition | Progress) => {
+    setEditing({ section, id: item._id });
+    if (section === 'workout') {
+      const w = item as Workout;
+      setWorkoutDraft({
+        exercise: w.exercise,
+        sets: String(w.sets),
+        reps: String(w.reps),
+        weight: String(w.weight),
+      });
+    } else if (section === 'nutrition') {
+      const n = item as Nutrition;
+      setNutritionDraft({
+        calories: String(n.calories),
+        protein: String(n.protein),
+        carbs: String(n.carbs),
+        fats: String(n.fats),
+      });
+    } else {
+      const p = item as Progress;
+      setProgressDraft({ weight: String(p.weight) });
+    }
+  };
+  const removeItem = async (section: Section, id: string) => {
+    try {
+      await request<void>(`/${sectionToRoute[section]}/${id}`, {
+        method: 'DELETE',
+      });
+      if (section === 'workout')
+        setWorkouts((prev) => prev.filter((i) => i._id !== id));
+      if (section === 'nutrition')
+        setNutrition((prev) => prev.filter((i) => i._id !== id));
+      if (section === 'progress')
+        setProgress((prev) => prev.filter((i) => i._id !== id));
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message);
+    }
+  };
+  const buildPayload = (section: Section) => {
+    const base = { userId: user!._id, date: today() };
+    if (section === 'workout') {
+      return {
+        ...base,
+        exercise: workoutDraft.exercise.trim(),
+        sets: Number(workoutDraft.sets),
+        reps: Number(workoutDraft.reps),
+        weight: Number(workoutDraft.weight),
+      };
+    }
+    if (section === 'nutrition') {
+      return {
+        ...base,
+        calories: Number(nutritionDraft.calories),
+        protein: Number(nutritionDraft.protein),
+        carbs: Number(nutritionDraft.carbs),
+        fats: Number(nutritionDraft.fats),
+      };
+    }
+    return { ...base, weight: Number(progressDraft.weight) };
+  };
+  const validate = (section: Section): string | null => {
+    if (section === 'workout') {
+      if (!workoutDraft.exercise.trim()) return 'Exercise name is required';
+      if (!workoutDraft.sets || !workoutDraft.reps || !workoutDraft.weight)
+        return 'Sets, reps, and weight are required';
+    }
+    if (section === 'nutrition' && !nutritionDraft.calories)
+      return 'Calories are required';
+    if (section === 'progress' && !progressDraft.weight)
+      return 'Weight is required';
+    return null;
+  };
+  const submit = async (section: Section) => {
+    if (!user?._id) {
+      Alert.alert('Login required');
+      return;
+    }
+    const error = validate(section);
+    if (error) {
+      Alert.alert('Missing info', error);
+      return;
+    }
+    const payload = buildPayload(section);
+    const route = sectionToRoute[section];
+    try {
+      if (editing && editing.section === section) {
+        await request(`/${route}/${editing.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await request(`/${route}`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+      await loadData(user._id);
+      cancelEdit();
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message);
+    }
+  };
+  if (loading) {
+    return (
+      <View style={[styles.screen, styles.center]}>
+        <ActivityIndicator color={theme.primary} />
+      </View>
+    );
+  }
+  if (!user) {
+  setUser({ _id: 'dev-user-1', name: 'Dev' } as User);
+}
+  const isEditing = (section: Section) => editing?.section === section;
+  return (
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.textMuted}
+          />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>MYfitness</Text>
+          <Text style={styles.muted}>
+            {user?.name ? `Welcome back, ${user.name}` : 'Welcome back'}
+          </Text>
+        </View>
+        {/* Today summary */}
         <Card>
-          <Text style={{ color: 'white', fontSize: 18 }}>🏋️ Workouts</Text>
-
-          <Input value={exercise} placeholder="Exercise" onChangeText={setExercise} />
-          <Input value={sets} placeholder="Sets" onChangeText={setSets} keyboardType="numeric" />
-          <Input value={reps} placeholder="Reps" onChangeText={setReps} keyboardType="numeric" />
-
-          <Button title="Add Workout" onPress={addWorkout} />
-
-          {/* FIX: DISPLAY */}
-          {workouts.map((w, i) => (
-            <Text key={i} style={{ color: 'white', marginTop: 5 }}>
-              {w.exercise} — {w.sets} x {w.reps}
-            </Text>
-          ))}
+          <View style={styles.statsRow}>
+            <Stat label="Calories today" value={`${stats.todayCalories}`} />
+            <Stat label="Workouts today" value={`${stats.todayWorkouts}`} />
+            <Stat label="Streak" value={`${stats.streak}d`} />
+          </View>
         </Card>
-        {/* ---------------- MACROS ---------------- */}
-        <Card>
-          <Text style={{ color: 'white', fontSize: 18 }}>🍎 Macros</Text>
-          <Input value={calories} placeholder="Calories" onChangeText={setCalories} />
-          <Input value={protein} placeholder="Protein" onChangeText={setProtein} />
-          <Input value={carbs} placeholder="Carbs" onChangeText={setCarbs} />
-          <Input value={fats} placeholder="Fats" onChangeText={setFats} />
-          <Button title="Save Macros" onPress={saveMacros} />
-          {/* FIX: DISPLAY */}
-          {nutrition.map((n, i) => (
-            <Text key={i} style={{ color: 'white', marginTop: 5 }}>
-              {n.date} | {n.calories} kcal | P:{n.protein} C:{n.carbs} F:{n.fats}
-            </Text>
-          ))}
+<Card title="🏋️  Workouts">
+  <Input
+    value={workoutDraft.exercise}
+    placeholder="Exercise"
+    onChangeText={(v) =>
+      setWorkoutDraft((d) => ({ ...d, exercise: v }))
+    }
+  />
+  {/* Sets + Reps */}
+  <View style={styles.row}>
+    <View style={styles.flex1}>
+      <Input
+        value={workoutDraft.sets}
+        placeholder="Sets"
+        keyboardType="numeric"
+        onChangeText={(v) =>
+          setWorkoutDraft((d) => ({ ...d, sets: v }))
+        }
+      />
+    </View>
+    <View style={styles.gap} />
+    <View style={styles.flex1}>
+      <Input
+        value={workoutDraft.reps}
+        placeholder="Reps"
+        keyboardType="numeric"
+        onChangeText={(v) =>
+          setWorkoutDraft((d) => ({ ...d, reps: v }))
+        }
+      />
+    </View>
+  </View>
+  {/* Weight */}
+  <View style={styles.row}>
+    <View style={styles.flex1}>
+      <Input
+        value={workoutDraft.weight}
+        placeholder="Weight (lbs)"
+        keyboardType="numeric"
+        onChangeText={(v) =>
+          setWorkoutDraft((d) => ({ ...d, weight: v }))
+        }
+      />
+    </View>
+  </View>
+</Card>
+<View style={styles.row}>
+  <Button
+    title={isEditing('workout') ? 'Save changes' : 'Add workout'}
+    onPress={() => submit('workout')}
+    style={styles.flex1}
+  />
+</View>
+            {isEditing('workout') && (
+              <>
+                <View style={styles.gap} />
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={cancelEdit}
+                />
+              </>
+            )}
+          <View style={styles.list}>
+            {workouts.length === 0 ? (
+              <Text style={styles.muted}>No workouts logged yet.</Text>
+            ) : (
+              workouts.map((w) => (
+                <View key={w._id} style={styles.listItem}>
+                  <View style={styles.flex1}>
+                    <Text style={styles.itemTitle}>{w.exercise}</Text>
+                    <Text style={styles.muted}>
+                      {w.sets} × {w.reps} • {w.weight} lbs •  {w.date}
+                    </Text>
+                  </View>
+                  <Button
+                    title="Edit"
+                    variant="ghost"
+                    onPress={() => startEdit('workout', w)}
+                  />
+                  <Button
+                    title="Delete"
+                    variant="danger"
+                    onPress={() => removeItem('workout', w._id)}
+                  />
+                </View>
+              ))
+            )}
+          </View>
+        {/* Macros */}
+        <Card title="🍎  Macros">
+          <View style={styles.row}>
+            <View style={styles.flex1}>
+              <Input
+                value={nutritionDraft.calories}
+                placeholder="Calories"
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  setNutritionDraft((d) => ({ ...d, calories: v }))
+                }
+              />
+            </View>
+            <View style={styles.gap} />
+            <View style={styles.flex1}>
+              <Input
+                value={nutritionDraft.protein}
+                placeholder="Protein"
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  setNutritionDraft((d) => ({ ...d, protein: v }))
+                }
+              />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.flex1}>
+              <Input
+                value={nutritionDraft.carbs}
+                placeholder="Carbs"
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  setNutritionDraft((d) => ({ ...d, carbs: v }))
+                }
+              />
+            </View>
+            <View style={styles.gap} />
+            <View style={styles.flex1}>
+              <Input
+                value={nutritionDraft.fats}
+                placeholder="Fats"
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  setNutritionDraft((d) => ({ ...d, fats: v }))
+                }
+              />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <Button
+              title={isEditing('nutrition') ? 'Save changes' : 'Add entry'}
+              onPress={() => submit('nutrition')}
+              style={styles.flex1}
+            />
+            {isEditing('nutrition') && (
+              <>
+                <View style={styles.gap} />
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={cancelEdit}
+                />
+              </>
+            )}
+          </View>
+
+          <View style={styles.list}>
+            {nutrition.length === 0 ? (
+              <Text style={styles.muted}>No meals logged yet.</Text>
+            ) : (
+              nutrition.map((n) => (
+                <View key={n._id} style={styles.listItem}>
+                  <View style={styles.flex1}>
+                    <Text style={styles.itemTitle}>{n.calories} kcal</Text>
+                    <Text style={styles.muted}>
+                      P {n.protein} • C {n.carbs} • F {n.fats} • {n.date}
+                    </Text>
+                  </View>
+                  <Button
+                    title="Edit"
+                    variant="ghost"
+                    onPress={() => startEdit('nutrition', n)}
+                  />
+                  <Button
+                    title="Delete"
+                    variant="danger"
+                    onPress={() => removeItem('nutrition', n._id)}
+                  />
+                </View>
+              ))
+            )}
+          </View>
         </Card>
-        {/* ---------------- PROGRESS ---------------- */}
-        <Card>
-          <Text style={{ color: 'white', fontSize: 18 }}>📊 Progress</Text>
-          <Input value={weight} placeholder="Weight" onChangeText={setWeight} keyboardType="numeric" />
-          <Button title="Log Weight" onPress={addWeight} />
-          {/* FIX: DISPLAY */}
-          {progress.map((p, i) => (
-            <Text key={i} style={{ color: 'white', marginTop: 5 }}>
-              {p.date} — {p.weight} lbs
-            </Text>
-          ))}
+
+        {/* Progress */}
+        <Card title="📊  Progress">
+          <Sparkline data={stats.weightSeries} />
+          <View style={[styles.row, { marginTop: 12 }]}>
+            <View style={styles.flex1}>
+              <Input
+                value={progressDraft.weight}
+                placeholder="Weight (lbs)"
+                keyboardType="numeric"
+                onChangeText={(v) =>
+                  setProgressDraft((d) => ({ ...d, weight: v }))
+                }
+              />
+            </View>
+            <View style={styles.gap} />
+            <Button
+              title={isEditing('progress') ? 'Save' : 'Log'}
+              onPress={() => submit('progress')}
+            />
+            {isEditing('progress') && (
+              <>
+                <View style={styles.gap} />
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={cancelEdit}
+                />
+              </>
+            )}
+          </View>
+
+          <View style={styles.list}>
+            {progress.length === 0 ? (
+              <Text style={styles.muted}>No weigh-ins yet.</Text>
+            ) : (
+              progress.map((p) => (
+                <View key={p._id} style={styles.listItem}>
+                  <View style={styles.flex1}>
+                    <Text style={styles.itemTitle}>{p.weight} lbs</Text>
+                    <Text style={styles.muted}>{p.date}</Text>
+                  </View>
+                  <Button
+                    title="Edit"
+                    variant="ghost"
+                    onPress={() => startEdit('progress', p)}
+                  />
+                  <Button
+                    title="Delete"
+                    variant="danger"
+                    onPress={() => removeItem('progress', p._id)}
+                  />
+                </View>
+              ))
+            )}
+          </View>
         </Card>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+/*  Styles                                                            */
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: theme.bg },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  header: { marginBottom: 16 },
+  title: {
+    color: theme.text,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  muted: { color: theme.textMuted, fontSize: 13 },
+  card: {
+    backgroundColor: theme.surface,
+    padding: 16,
+    borderRadius: theme.radius,
+    marginBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.border,
+  },
+  cardTitle: {
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  input: {
+    backgroundColor: theme.surfaceAlt,
+    color: theme.text,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+    fontSize: 15,
+  },
+  btn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  btnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  flex1: { flex: 1 },
+  gap: { width: 8, height: 8 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  stat: { flex: 1, alignItems: 'center' },
+  statValue: { color: theme.text, fontSize: 22, fontWeight: '700' },
+  statLabel: { color: theme.textMuted, fontSize: 11, marginTop: 2 },
+  list: { marginTop: 12, gap: 8 },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.surfaceAlt,
+    padding: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  itemTitle: { color: theme.text, fontWeight: '600' },
+  spark: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+    height: 60,
+  },
+  sparkBar: {
+    flex: 1,
+    backgroundColor: theme.primary,
+    borderRadius: 2,
+    opacity: 0.85,
+  },
+});
